@@ -12,7 +12,7 @@
 import { ConnectError } from '@connectrpc/connect';
 import { useLocation } from '@tanstack/react-router';
 import { Alert, AlertDescription } from 'components/redpanda-ui/components/alert';
-import { Button, buttonVariants } from 'components/redpanda-ui/components/button';
+import { Button } from 'components/redpanda-ui/components/button';
 import {
   Dialog,
   DialogBody,
@@ -24,7 +24,6 @@ import {
 import { Field, FieldLabel, FieldSeparator } from 'components/redpanda-ui/components/field';
 import { Input } from 'components/redpanda-ui/components/input';
 import { RedpandaLogo } from 'components/redpanda-ui/components/redpanda-logo';
-import { cn } from 'components/redpanda-ui/lib/utils';
 import { CircleAlertIcon, InfoIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -183,18 +182,71 @@ const BasicAuthComponent = () => {
   );
 };
 
-const OidcAuthComponent = () => (
-  <div>
-    {/* An anchor, not a Button: this navigates to the backend's OIDC entry point. `rounded-md`
-        because the radius lives on the Button component, not in `buttonVariants`. */}
-    <a
-      className={cn(buttonVariants({ variant: 'brand' }), 'w-full rounded-md')}
-      href={`${appConfig.grpcBasePath}/auth/login/oidc`}
-    >
-      Log in with OIDC
-    </a>
-  </div>
-);
+type OidcLoginOptions = { hcFunctions: string[] };
+
+async function fetchOidcLoginOptions(): Promise<OidcLoginOptions> {
+  const response = await fetch(`${appConfig.grpcBasePath}/auth/login/oidc/options`, { credentials: 'same-origin' });
+  // Backends whose OIDC login is provided elsewhere don't serve login options.
+  if (response.status === 404) {
+    return { hcFunctions: [] };
+  }
+  if (!response.ok) {
+    throw new Error(`failed to load login options: ${response.status} ${response.statusText}`);
+  }
+  return (await response.json()) as OidcLoginOptions;
+}
+
+const OidcAuthComponent = () => {
+  const [options, setOptions] = useState<OidcLoginOptions | null>(null);
+  const [optionsError, setOptionsError] = useState<string | null>(null);
+  const [hcFunction, setHcFunction] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    fetchOidcLoginOptions()
+      .then(setOptions)
+      .catch((error: unknown) => setOptionsError(error instanceof Error ? error.message : String(error)));
+  }, []);
+
+  const hcFunctions = options?.hcFunctions ?? [];
+  const canLogin = options !== null && (hcFunctions.length === 0 || hcFunction !== undefined);
+
+  const handleLogin = () => {
+    const query = hcFunction === undefined ? '' : `?${new URLSearchParams({ hcFunction })}`;
+    window.location.assign(`${appConfig.grpcBasePath}/auth/login/oidc${query}`);
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      {hcFunctions.length > 0 && (
+        <Field>
+          <FieldLabel htmlFor="hc-function">HC function</FieldLabel>
+          <SingleSelect<string | undefined>
+            data-testid="hc-function-select"
+            id="hc-function"
+            onChange={setHcFunction}
+            options={hcFunctions.map((f) => ({ value: f }))}
+            placeholder="Select HC function"
+            value={hcFunction}
+          />
+        </Field>
+      )}
+      {optionsError !== null && (
+        <Alert icon={<CircleAlertIcon />} variant="destructive">
+          <AlertDescription>{optionsError}</AlertDescription>
+        </Alert>
+      )}
+      <Button
+        className="w-full"
+        data-testid="oidc-login-button"
+        disabled={!canLogin}
+        onClick={handleLogin}
+        variant="brand"
+      >
+        Log in with OIDC
+      </Button>
+    </div>
+  );
+};
 
 const LoginPage = () => {
   const { searchStr } = useLocation();

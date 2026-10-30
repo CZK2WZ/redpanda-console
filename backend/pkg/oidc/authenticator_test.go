@@ -295,3 +295,63 @@ func TestDisplayName(t *testing.T) {
 		})
 	}
 }
+
+func TestLoginWithHCFunctions(t *testing.T) {
+	p := newFakeProvider(t)
+	a := newTestAuthenticator(t, p)
+	a.cfg.HCFunctions = []string{"hc-admin", "email"}
+
+	tests := []struct {
+		name       string
+		hcFunction string
+		wantStatus int
+		wantScope  string
+	}{
+		{name: "adds the selected function as scope", hcFunction: "hc-admin", wantStatus: http.StatusFound, wantScope: "openid profile email offline_access hc-admin"},
+		{name: "does not duplicate a configured scope", hcFunction: "email", wantStatus: http.StatusFound, wantScope: "openid profile email offline_access"},
+		{name: "rejects a missing function", wantStatus: http.StatusBadRequest},
+		{name: "rejects an unknown function", hcFunction: "hc-root", wantStatus: http.StatusBadRequest},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			target := "/auth/login/oidc?" + url.Values{"hcFunction": {tt.hcFunction}}.Encode()
+			a.HandleLogin()(rec, httptest.NewRequest(http.MethodGet, target, http.NoBody))
+			require.Equal(t, tt.wantStatus, rec.Code)
+			if tt.wantStatus != http.StatusFound {
+				assert.Nil(t, cookieByName(rec.Result().Cookies(), loginCookieName))
+				return
+			}
+			authURL, err := url.Parse(rec.Header().Get("Location"))
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantScope, authURL.Query().Get("scope"))
+		})
+	}
+}
+
+func TestLoginWithoutHCFunctionsIgnoresParameter(t *testing.T) {
+	a := newTestAuthenticator(t, newFakeProvider(t))
+	rec := httptest.NewRecorder()
+	a.HandleLogin()(rec, httptest.NewRequest(http.MethodGet, "/auth/login/oidc?hcFunction=hc-admin", http.NoBody))
+	require.Equal(t, http.StatusFound, rec.Code)
+	authURL, err := url.Parse(rec.Header().Get("Location"))
+	require.NoError(t, err)
+	assert.Equal(t, "openid profile email offline_access", authURL.Query().Get("scope"))
+}
+
+func TestHandleLoginOptions(t *testing.T) {
+	a := newTestAuthenticator(t, newFakeProvider(t))
+	for _, hcFunctions := range [][]string{nil, {"hc-admin", "hc-dev"}} {
+		a.cfg.HCFunctions = hcFunctions
+		rec := httptest.NewRecorder()
+		a.HandleLoginOptions()(rec, httptest.NewRequest(http.MethodGet, "/auth/login/oidc/options", http.NoBody))
+		require.Equal(t, http.StatusOK, rec.Code)
+
+		var body struct {
+			HCFunctions []string `json:"hcFunctions"`
+		}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+		assert.NotNil(t, body.HCFunctions)
+		assert.ElementsMatch(t, hcFunctions, body.HCFunctions)
+	}
+}

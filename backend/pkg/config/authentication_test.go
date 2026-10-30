@@ -39,6 +39,10 @@ func TestAuthenticationValidate(t *testing.T) {
 		{name: "relative redirect url", mutate: func(a *Authentication) { a.OIDC.RedirectURL = "/login/callbacks/oidc" }, wantErr: "redirectUrl"},
 		{name: "missing openid scope", mutate: func(a *Authentication) { a.OIDC.Scopes = []string{"email"} }, wantErr: "openid"},
 		{name: "non-positive session duration", mutate: func(a *Authentication) { a.SessionDuration = 0 }, wantErr: "sessionDuration"},
+		{name: "valid hc functions", mutate: func(a *Authentication) { a.HCFunctions = []string{"hc-admin", "hc:dev"} }},
+		{name: "empty hc function", mutate: func(a *Authentication) { a.HCFunctions = []string{""} }, wantErr: "hcFunctions[0]"},
+		{name: "hc function with space", mutate: func(a *Authentication) { a.HCFunctions = []string{"hc admin"} }, wantErr: "valid OAuth 2.0 scope"},
+		{name: "duplicate hc function", mutate: func(a *Authentication) { a.HCFunctions = []string{"hc", "hc"} }, wantErr: "more than once"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

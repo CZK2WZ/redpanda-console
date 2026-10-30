@@ -18,6 +18,11 @@ import { act, renderWithFileRoutes, screen } from 'test-utils';
 import LoginPage from './login';
 import { config as appConfig } from '../../config';
 
+const LOGIN_URL = /\/auth\/login\/oidc$/;
+const LOGIN_URL_WITH_HC_DEV = /\/auth\/login\/oidc\?hcFunction=hc-dev$/;
+const LOGIN_OPTIONS_URL = /\/auth\/login\/oidc\/options$/;
+const LOGIN_OPTIONS_ERROR = /failed to load login options: 500/;
+
 describe('the LoginPage', () => {
   const initialAuthClient = appConfig.authenticationClient;
   const loginSaslScram = rs.fn();
@@ -54,6 +59,65 @@ describe('the LoginPage', () => {
     expect(screen.getByTestId('auth-password-input')).toBeEnabled();
   });
 });
+
+describe('the LoginPage with OIDC', () => {
+  const initialAuthClient = appConfig.authenticationClient;
+
+  beforeEach(() => {
+    appConfig.authenticationClient = {
+      listAuthenticationMethods: () => Promise.resolve({ methods: [AuthenticationMethod.OIDC] }),
+    } as unknown as typeof appConfig.authenticationClient;
+  });
+
+  afterEach(() => {
+    appConfig.authenticationClient = initialAuthClient;
+    rs.restoreAllMocks();
+  });
+
+  function renderWithLoginOptions(response: Response) {
+    const fetchMock = rs.spyOn(globalThis, 'fetch').mockResolvedValue(response);
+    const assign = rs.spyOn(window.location, 'assign').mockImplementation(() => undefined);
+    renderWithFileRoutes(<LoginPage />, { initialLocation: '/login' });
+    return { fetchMock, assign, user: userEvent.setup() };
+  }
+
+  test('keeps the login button disabled until an HC function is selected', async () => {
+    const { fetchMock, assign, user } = renderWithLoginOptions(Response.json({ hcFunctions: ['hc-admin', 'hc-dev'] }));
+
+    const loginButton = await screen.findByTestId('oidc-login-button');
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringMatching(LOGIN_OPTIONS_URL), expect.anything());
+    expect(loginButton).toBeDisabled();
+
+    await selectHcFunction(user, 'hc-dev');
+    expect(loginButton).toBeEnabled();
+
+    await user.click(loginButton);
+    expect(assign).toHaveBeenCalledWith(expect.stringMatching(LOGIN_URL_WITH_HC_DEV));
+  });
+
+  test('enables the login button without a selection when no HC functions are configured', async () => {
+    const { assign, user } = renderWithLoginOptions(Response.json({ hcFunctions: [] }));
+
+    const loginButton = await screen.findByTestId('oidc-login-button');
+    await expect.poll(() => (loginButton as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.queryByRole('combobox', { name: 'HC function' })).not.toBeInTheDocument();
+
+    await user.click(loginButton);
+    expect(assign).toHaveBeenCalledWith(expect.stringMatching(LOGIN_URL));
+  });
+
+  test('keeps the login button disabled when the login options cannot be loaded', async () => {
+    renderWithLoginOptions(new Response('boom', { status: 500, statusText: 'Internal Server Error' }));
+
+    expect(await screen.findByText(LOGIN_OPTIONS_ERROR)).toBeInTheDocument();
+    expect(screen.getByTestId('oidc-login-button')).toBeDisabled();
+  });
+});
+
+async function selectHcFunction(user: ReturnType<typeof userEvent.setup>, name: string) {
+  await user.click(await screen.findByRole('combobox', { name: 'HC function' }));
+  await user.click(await screen.findByRole('option', { name }));
+}
 
 function rejectNextLogin(login: ReturnType<typeof rs.fn>) {
   let reject!: (reason: unknown) => void;

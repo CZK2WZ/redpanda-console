@@ -27,6 +27,10 @@ type Authentication struct {
 	// of whether the identity provider could still refresh its tokens.
 	SessionDuration time.Duration      `yaml:"sessionDuration"`
 	OIDC            AuthenticationOIDC `yaml:"oidc"`
+	// HCFunctions lists the HC functions offered on the login page. The
+	// selected one is requested as an additional OIDC scope, and logging in
+	// requires a selection if the list is not empty.
+	HCFunctions []string `yaml:"hcFunctions"`
 }
 
 // AuthenticationOIDC configures login through an OpenID Connect provider.
@@ -70,7 +74,28 @@ func (c *Authentication) Validate() error {
 	if err := c.OIDC.Validate(); err != nil {
 		return fmt.Errorf("failed to validate oidc config: %w", err)
 	}
+	for i, f := range c.HCFunctions {
+		if !isScopeToken(f) {
+			return fmt.Errorf("hcFunctions[%d] %q is not a valid OAuth 2.0 scope", i, f)
+		}
+		if slices.Contains(c.HCFunctions[:i], f) {
+			return fmt.Errorf("hcFunctions[%d] %q is listed more than once", i, f)
+		}
+	}
 	return nil
+}
+
+// isScopeToken reports whether s is a scope token as defined in RFC 6749, section 3.3.
+func isScopeToken(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < 0x21 || r > 0x7E || r == '"' || r == '\\' {
+			return false
+		}
+	}
+	return true
 }
 
 // Validate the OIDC config.

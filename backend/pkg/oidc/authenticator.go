@@ -96,18 +96,52 @@ func (a *Authenticator) Sessions() *SessionStore {
 	return a.sessions
 }
 
-// HandleLogin redirects the browser to the identity provider.
+// HandleLogin redirects the browser to the identity provider. If HC functions
+// are configured, the hcFunction query parameter must name one of them, and it
+// is requested as an additional scope.
 func (a *Authenticator) HandleLogin() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		scopes, err := a.loginScopes(r.URL.Query().Get("hcFunction"))
+		if err != nil {
+			rest.SendRESTError(w, r, a.logger, &rest.Error{Err: err, Status: http.StatusBadRequest, Message: err.Error()})
+			return
+		}
+
 		state, nonce, verifier := rand.Text(), rand.Text(), oauth2.GenerateVerifier()
 		if err := a.addPendingLogin(state, pendingLogin{nonce: nonce, verifier: verifier, expiresAt: time.Now().Add(loginTimeout)}); err != nil {
 			rest.SendRESTError(w, r, a.logger, &rest.Error{Err: err, Status: http.StatusServiceUnavailable, Message: err.Error()})
 			return
 		}
 
+		oauth2Cfg := a.oauth2
+		oauth2Cfg.Scopes = scopes
 		a.setCookie(w, loginCookieName, state, loginTimeout)
-		http.Redirect(w, r, a.oauth2.AuthCodeURL(state, gooidc.Nonce(nonce), oauth2.S256ChallengeOption(verifier)), http.StatusFound)
+		http.Redirect(w, r, oauth2Cfg.AuthCodeURL(state, gooidc.Nonce(nonce), oauth2.S256ChallengeOption(verifier)), http.StatusFound)
 	}
+}
+
+// HandleLoginOptions returns the choices the login page must offer.
+func (a *Authenticator) HandleLoginOptions() http.HandlerFunc {
+	hcFunctions := a.cfg.HCFunctions
+	if hcFunctions == nil {
+		hcFunctions = []string{}
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		rest.SendResponse(w, r, a.logger, http.StatusOK, map[string]any{"hcFunctions": hcFunctions})
+	}
+}
+
+func (a *Authenticator) loginScopes(hcFunction string) ([]string, error) {
+	if len(a.cfg.HCFunctions) == 0 {
+		return a.oauth2.Scopes, nil
+	}
+	if !slices.Contains(a.cfg.HCFunctions, hcFunction) {
+		return nil, errors.New("hcFunction must be one of the configured HC functions")
+	}
+	if slices.Contains(a.oauth2.Scopes, hcFunction) {
+		return a.oauth2.Scopes, nil
+	}
+	return append(slices.Clone(a.oauth2.Scopes), hcFunction), nil
 }
 
 // HandleCallback completes the login after the identity provider redirected

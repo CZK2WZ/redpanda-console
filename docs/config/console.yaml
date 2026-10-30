@@ -148,6 +148,9 @@ authentication:
 #     redirectUrl: "https://console.mycompany.com/login/callbacks/oidc"
 #     scopes: ["openid", "profile", "email", "offline_access"]
 #     displayNameClaim: "name"
+#   # HC functions offered on the login page. The user must select one, and it
+#   # is requested as an additional scope.
+#   hcFunctions: ["hc-admin", "hc-developer"]
 
 #----------------------------------------------------------------------------
 # Console authorization and role bindings

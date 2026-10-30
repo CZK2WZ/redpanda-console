@@ -584,6 +584,7 @@ func (api *API) routes() *chi.Mux {
 
 		if api.oidc != nil {
 			router.Get("/auth/login/oidc", api.oidc.HandleLogin())
+			router.Get("/auth/login/oidc/options", api.oidc.HandleLoginOptions())
 			router.Get("/auth/callbacks/oidc", api.oidc.HandleCallback())
 			router.Get("/auth/logout", api.oidc.HandleLogout())
 		}
