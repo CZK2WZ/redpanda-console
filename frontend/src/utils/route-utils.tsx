@@ -73,7 +73,6 @@ export type MenuItemState = {
 const DisabledReasons = {
   notSupported: 0, // kafka cluster version too low
   noPermission: 1, // user doesn't have permissions to use the feature
-  enterpriseFeature: 2,
   notSupportedServerless: 3, // This feature is not supported in serverless mode
 } as const;
 
@@ -136,18 +135,10 @@ function checkPermissions(permissions: UserPermissions[] | undefined): DisabledR
 }
 
 /**
- * Check if app features are enabled.
+ * Check if app features are enabled. Features that are not enabled (e.g. not licensed) are hidden.
  */
-function checkAppFeatures(appFeatures: AppFeature[] | undefined): DisabledReason | null {
-  if (!appFeatures) {
-    return null;
-  }
-  for (const f of appFeatures) {
-    if (AppFeatures[f] === false) {
-      return DisabledReasons.enterpriseFeature;
-    }
-  }
-  return null;
+function areAppFeaturesEnabled(appFeatures: AppFeature[] | undefined): boolean {
+  return appFeatures?.every((f) => AppFeatures[f]) ?? true;
 }
 
 /**
@@ -162,13 +153,11 @@ function routeVisibility(
   return () => {
     const isVisible = typeof visible === 'boolean' ? visible : visible();
     const [shouldHide, featureReason] = checkFeatureSupport(requiredFeatures);
-    const disabledReasons = [
-      featureReason,
-      checkPermissions(requiredPermissions),
-      checkAppFeatures(requiredAppFeatures),
-    ].filter((reason): reason is DisabledReason => reason !== null);
+    const disabledReasons = [featureReason, checkPermissions(requiredPermissions)].filter(
+      (reason): reason is DisabledReason => reason !== null
+    );
 
-    return { visible: !shouldHide && isVisible, disabledReasons };
+    return { visible: !shouldHide && isVisible && areAppFeaturesEnabled(requiredAppFeatures), disabledReasons };
   };
 }
 
@@ -210,7 +199,7 @@ export const SIDEBAR_ITEMS: SidebarItem[] = [
     title: 'Schema Registry',
     icon: CubeIcon,
     group: SidebarSection.STREAMING,
-    visibilityCheck: routeVisibility(true),
+    visibilityCheck: routeVisibility(true, [Feature.SchemaRegistry]),
   },
   {
     path: '/groups',
@@ -256,7 +245,10 @@ export const SIDEBAR_ITEMS: SidebarItem[] = [
         }
         return { visible: false, disabledReasons: [DisabledReasons.notSupported] };
       }
-      return { visible: true, disabledReasons: [] };
+      return {
+        visible: isSupported(Feature.KafkaConnect) || isSupported(Feature.PipelineService),
+        disabledReasons: [],
+      };
     },
   },
   {
@@ -288,7 +280,7 @@ export const SIDEBAR_ITEMS: SidebarItem[] = [
         return !isServerless();
       }
       return true;
-    }),
+    }, [Feature.ShadowLinkService]),
   },
   // --- Platform ---
   {
@@ -341,7 +333,6 @@ function getDisabledText(reasons: DisabledReason[]): string {
   const textMap: Record<DisabledReason, string> = {
     [DisabledReasons.noPermission]: "You don't have permissions to view this page.",
     [DisabledReasons.notSupported]: 'The Kafka cluster does not support this feature.',
-    [DisabledReasons.enterpriseFeature]: 'This feature requires an enterprise license.',
     [DisabledReasons.notSupportedServerless]: 'This feature is not yet supported for Serverless.',
   };
   return textMap[firstReason];

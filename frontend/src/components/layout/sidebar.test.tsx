@@ -83,3 +83,60 @@ describe('the SidebarNavigation re-renders on endpointCompatibility change (UX-9
     unmount();
   });
 });
+
+describe('the sidebar hides disabled features', () => {
+  const featurePaths = ['/schema-registry', '/connect-clusters', '/transforms', '/shadowlinks', '/reassign-partitions'];
+  const visiblePaths = () =>
+    createGroupedSidebarItems()
+      .flatMap((g) => g.items)
+      .map((item) => item.to);
+  const withSupport = (isSupported: boolean): EndpointCompatibility => ({
+    kafkaVersion: '3.6.0',
+    endpoints: [
+      Feature.SchemaRegistry,
+      Feature.KafkaConnect,
+      Feature.PipelineService,
+      Feature.TransformsService,
+      Feature.ShadowLinkService,
+      Feature.GetReassignments,
+      Feature.PatchReassignments,
+    ].map((f) => ({ endpoint: f.endpoint, method: f.method, isSupported })),
+  });
+
+  afterEach(() => {
+    useSupportedFeaturesStore.setState({ endpointCompatibility: null });
+  });
+
+  it('hides all of them when the backend reports them as unsupported', () => {
+    act(() => {
+      useSupportedFeaturesStore.getState().setEndpointCompatibility(withSupport(false));
+    });
+
+    const paths = visiblePaths();
+    for (const path of featurePaths) {
+      expect(paths).not.toContain(path);
+    }
+  });
+
+  it('shows the supported ones, except reassign partitions without the REASSIGN_PARTITIONS app feature', () => {
+    act(() => {
+      useSupportedFeaturesStore.getState().setEndpointCompatibility(withSupport(true));
+    });
+
+    const paths = visiblePaths();
+    for (const path of ['/schema-registry', '/connect-clusters', '/transforms', '/shadowlinks']) {
+      expect(paths).toContain(path);
+    }
+    expect(paths).not.toContain('/reassign-partitions');
+  });
+
+  it('shows schema registry and connect when an older backend does not report them', () => {
+    act(() => {
+      useSupportedFeaturesStore.getState().setEndpointCompatibility({ kafkaVersion: '3.6.0', endpoints: [] });
+    });
+
+    const paths = visiblePaths();
+    expect(paths).toContain('/schema-registry');
+    expect(paths).toContain('/connect-clusters');
+  });
+});

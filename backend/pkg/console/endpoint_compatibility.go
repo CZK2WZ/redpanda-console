@@ -240,6 +240,16 @@ func (s *Service) GetEndpointCompatibility(ctx context.Context) (EndpointCompati
 	// OSS defaults
 	endpoints = append(endpoints,
 		EndpointCompatibilityEndpoint{
+			Endpoint:    "/api/schema-registry/subjects",
+			Method:      "GET",
+			IsSupported: s.cfg.SchemaRegistry.Enabled,
+		},
+		EndpointCompatibilityEndpoint{
+			Endpoint:    "/api/kafka-connect/connectors",
+			Method:      "GET",
+			IsSupported: s.cfg.KafkaConnect.Enabled,
+		},
+		EndpointCompatibilityEndpoint{
 			Endpoint:    consolev1alpha1connect.PipelineServiceName,
 			Method:      "POST",
 			IsSupported: false,

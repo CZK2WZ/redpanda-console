@@ -88,7 +88,12 @@ export class Feature {
     endpoint: 'redpanda.api.dataplane.v1alpha3.SQLService',
     method: 'POST',
   };
+  static readonly SchemaRegistry: FeatureEntry = { endpoint: '/api/schema-registry/subjects', method: 'GET' };
+  static readonly KafkaConnect: FeatureEntry = { endpoint: '/api/kafka-connect/connectors', method: 'GET' };
 }
+
+// Backends that predate these entries don't report them, so their absence must not hide the feature.
+const SUPPORTED_UNLESS_REPORTED = [Feature.SchemaRegistry.endpoint, Feature.KafkaConnect.endpoint];
 
 /**
  * Compute whether a feature is supported given endpoint compatibility data.
@@ -114,6 +119,10 @@ function computeSupported(f: FeatureEntry, c: EndpointCompatibility | null): { s
     if (e.method === f.method && e.endpoint === f.endpoint) {
       return { supported: e.isSupported };
     }
+  }
+
+  if (SUPPORTED_UNLESS_REPORTED.includes(f.endpoint)) {
+    return { supported: true };
   }
 
   if (
@@ -149,7 +158,16 @@ export function isSupported(f: FeatureEntry): boolean {
 /**
  * A list of features we should hide instead of showing a disabled message.
  */
-const HIDE_IF_NOT_SUPPORTED_FEATURES = [Feature.GetQuotas, Feature.SQLService];
+const HIDE_IF_NOT_SUPPORTED_FEATURES = [
+  Feature.GetQuotas,
+  Feature.SQLService,
+  Feature.SchemaRegistry,
+  Feature.KafkaConnect,
+  Feature.TransformsService,
+  Feature.ShadowLinkService,
+  Feature.GetReassignments,
+  Feature.PatchReassignments,
+];
 export function shouldHideIfNotSupported(f: FeatureEntry): boolean {
   return HIDE_IF_NOT_SUPPORTED_FEATURES.includes(f);
 }
