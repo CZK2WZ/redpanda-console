@@ -19,6 +19,7 @@ require (
 	github.com/carlmjohnson/requests v0.25.1
 	github.com/cloudhut/common v0.11.0
 	github.com/cloudhut/connect-client v0.0.0-20240523140316-27c93e339567
+	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/docker/go-connections v0.6.0
 	github.com/dop251/goja v0.0.0-20251103141225-af2ceb9156d7
 	github.com/fxamacker/cbor/v2 v2.9.0
@@ -27,6 +28,7 @@ require (
 	github.com/go-chi/cors v1.2.2
 	github.com/go-git/go-billy/v5 v5.9.0
 	github.com/go-git/go-git/v5 v5.19.2
+	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
@@ -66,6 +68,7 @@ require (
 	go.vallahaye.net/connect-gateway v0.11.0
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f
 	golang.org/x/net v0.59.0
+	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sync v0.23.0
 	golang.org/x/text v0.42.0
 	google.golang.org/genproto v0.0.0-20260316180232-0b37fe3546d5

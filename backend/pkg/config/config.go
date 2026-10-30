@@ -35,16 +35,17 @@ type Config struct {
 	MetricsNamespace       string `yaml:"metricsNamespace"`
 	ServeFrontend          bool   `yaml:"serveFrontend"` // useful for local development where we want the frontend from 'npm run start'
 
-	Console        Console      `yaml:"console"`
-	Redpanda       Redpanda     `yaml:"redpanda"`
-	KafkaConnect   KafkaConnect `yaml:"kafkaConnect"`
-	REST           Server       `yaml:"server"`
-	Kafka          Kafka        `yaml:"kafka"`
-	Serde          Serde        `yaml:"serde"`
-	SchemaRegistry Schema       `yaml:"schemaRegistry"`
-	SQL            SQL          `yaml:"sql"`
-	Logger         Logging      `yaml:"logger"`
-	Analytics      Analytics    `yaml:"analytics"`
+	Console        Console        `yaml:"console"`
+	Redpanda       Redpanda       `yaml:"redpanda"`
+	KafkaConnect   KafkaConnect   `yaml:"kafkaConnect"`
+	REST           Server         `yaml:"server"`
+	Kafka          Kafka          `yaml:"kafka"`
+	Serde          Serde          `yaml:"serde"`
+	SchemaRegistry Schema         `yaml:"schemaRegistry"`
+	SQL            SQL            `yaml:"sql"`
+	Logger         Logging        `yaml:"logger"`
+	Analytics      Analytics      `yaml:"analytics"`
+	Authentication Authentication `yaml:"authentication"`
 }
 
 // RegisterFlags for all (sub)configs
@@ -59,6 +60,7 @@ func (c *Config) RegisterFlags(f *flag.FlagSet) {
 	c.KafkaConnect.RegisterFlags(f)
 	c.SchemaRegistry.RegisterFlags(f)
 	c.SQL.RegisterFlags(f)
+	c.Authentication.RegisterFlags(f)
 }
 
 // Validate all root and child config structs
@@ -108,6 +110,17 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("failed to validate Analytics config: %w", err)
 	}
 
+	err = c.Authentication.Validate()
+	if err != nil {
+		return fmt.Errorf("failed to validate authentication config: %w", err)
+	}
+
+	if c.Authentication.OIDC.Enabled && c.Kafka.SASL.Enabled && c.Kafka.SASL.ImpersonateUser {
+		if err := c.Kafka.SASL.validateOIDCImpersonation(); err != nil {
+			return fmt.Errorf("failed to validate kafka sasl config: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -126,6 +139,7 @@ func (c *Config) SetDefaults() {
 	c.KafkaConnect.SetDefaults()
 	c.SQL.SetDefaults()
 	c.Analytics.SetDefaults()
+	c.Authentication.SetDefaults()
 }
 
 // LoadConfig read YAML-formatted config from filename into cfg.

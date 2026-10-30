@@ -38,6 +38,7 @@ import (
 	"github.com/redpanda-data/console/backend/pkg/git"
 	"github.com/redpanda-data/console/backend/pkg/license"
 	loggerpkg "github.com/redpanda-data/console/backend/pkg/logger"
+	"github.com/redpanda-data/console/backend/pkg/oidc"
 	"github.com/redpanda-data/console/backend/pkg/version"
 )
 
@@ -72,6 +73,9 @@ type API struct {
 
 	// internal server instance
 	server *rest.Server
+
+	// oidc is set when the built-in OIDC login is enabled.
+	oidc *oidc.Authenticator
 }
 
 // New creates a new API instance
@@ -110,6 +114,20 @@ func New(cfg *config.Config, inputOpts ...Option) (*API, error) {
 	logger.Info("started Redpanda Console",
 		slog.String("version", version.Version),
 		slog.String("built_at", version.BuiltAt))
+
+	var authenticator *oidc.Authenticator
+	if cfg.Authentication.OIDC.Enabled {
+		discoveryCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		var err error
+		authenticator, err = oidc.NewAuthenticator(discoveryCtx, cfg.Authentication, loggerpkg.Named(logger, "oidc"))
+		cancel()
+		if err != nil {
+			return nil, fmt.Errorf("create oidc authenticator: %w", err)
+		}
+		if cfg.Kafka.SASL.Enabled && cfg.Kafka.SASL.ImpersonateUser && opts.kafkaClientProvider == nil {
+			opts.kafkaClientProvider = kafkafactory.NewImpersonatingClientProvider(cfg, logger, opts.prometheusRegistry, authenticator.Sessions())
+		}
+	}
 
 	// Create default client factories if none are provided
 	if err := setDefaultClientProviders(cfg, logger, opts); err != nil {
@@ -156,6 +174,7 @@ func New(cfg *config.Config, inputOpts ...Option) (*API, error) {
 		Hooks:                  newDefaultHooks(),
 		FrontendResources:      opts.frontendResources,
 		PrometheusRegistry:     opts.prometheusRegistry,
+		oidc:                   authenticator,
 		License: license.License{
 			Source:    license.SourceConsole,
 			Type:      license.TypeOpenSource,

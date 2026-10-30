@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	loggerpkg "github.com/redpanda-data/console/backend/pkg/logger"
@@ -42,6 +43,9 @@ func (api *API) handleFrontendIndex() http.HandlerFunc {
 	}
 	// Get enabled features from hooks
 	enabledFeatures := api.Hooks.Console.EnabledFeatures()
+	if api.oidc != nil && !slices.Contains(enabledFeatures, "SINGLE_SIGN_ON") {
+		enabledFeatures = append(enabledFeatures, "SINGLE_SIGN_ON")
+	}
 
 	// Add analytics_enabled feature if analytics is enabled
 	if api.Cfg.Analytics.Enabled {

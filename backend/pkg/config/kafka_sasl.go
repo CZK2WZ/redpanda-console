@@ -10,6 +10,7 @@
 package config
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 )
@@ -32,16 +33,13 @@ const (
 // KafkaSASL for Kafka client
 type KafkaSASL struct {
 	Enabled bool `yaml:"enabled"`
-	// ImpersonateUser enables an enterprise feature where the
-	// authentication credentials used by the user to log into
-	// the Web UI are impersonated for connections to upstream
-	// services like Kafka, Schema Registry, and Redpanda Admin API.
-	// When enabled, the user's Web UI authentication method
-	// (e.g., OIDC or Basic) determines the authentication mechanism
-	// used for these services. The user’s identity must exist
-	// in the upstream service and have appropriate permissions
-	// for successful authentication. If this is enabled, other
-	// login credentials cannot be set.
+	// ImpersonateUser uses the credentials the user logged into the Web UI
+	// with for connections to Kafka, instead of static credentials. With the
+	// built-in authentication.oidc login, each user gets their own Kafka
+	// client that authenticates via OAUTHBEARER with the user's OIDC access
+	// token, so Kafka ACLs apply per user. The user's identity must exist in
+	// Kafka and have appropriate permissions. If this is enabled, other login
+	// credentials cannot be set.
 	ImpersonateUser bool                 `yaml:"impersonateUser"`
 	Username        string               `yaml:"username"`
 	Password        string               `yaml:"password"`
@@ -76,6 +74,10 @@ func (c *KafkaSASL) Validate() error {
 			return fmt.Errorf("failed to validate gssapi config: %w", err)
 		}
 	case SASLMechanismOAuthBearer:
+		if c.ImpersonateUser {
+			// The token is the logged-in user's, not configured statically.
+			break
+		}
 		err := c.OAUth.Validate()
 		if err != nil {
 			return fmt.Errorf("failed to validate OAuth Bearer config: %w", err)
@@ -89,5 +91,17 @@ func (c *KafkaSASL) Validate() error {
 		return fmt.Errorf("given sasl mechanism '%v' is invalid", c.Mechanism)
 	}
 
+	return nil
+}
+
+// validateOIDCImpersonation checks the SASL config for impersonating users
+// logged in through the built-in OIDC authentication.
+func (c *KafkaSASL) validateOIDCImpersonation() error {
+	if c.Mechanism != SASLMechanismOAuthBearer {
+		return fmt.Errorf("impersonateUser with oidc authentication requires sasl mechanism %s", SASLMechanismOAuthBearer)
+	}
+	if c.Username != "" || c.Password != "" || c.OAUth.Token != "" || c.OAUth.TokenFilepath != "" || c.OAUth.TokenEndpoint != "" {
+		return errors.New("impersonateUser cannot be combined with static sasl credentials")
+	}
 	return nil
 }

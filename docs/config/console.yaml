@@ -131,6 +131,24 @@ authentication:
 
   # Basic authentication is supported by default.
 
+# The open source build ships a built-in OIDC login with a different schema
+# from the one above. Combine it with kafka.sasl.impersonateUser: true and
+# kafka.sasl.mechanism: OAUTHBEARER to connect to Kafka as the logged-in user
+# with their OIDC access token. Sessions are held in memory, so they do not
+# survive a restart and are not shared between replicas.
+# authentication:
+#   useSecureCookies: true
+#   sessionDuration: 12h
+#   oidc:
+#     enabled: true
+#     issuerUrl: "https://idp.mycompany.com/realms/kafka"
+#     clientId: "console"
+#     clientSecret: "your-oidc-client-secret"
+#     # Frontend callback page; must be registered with the identity provider.
+#     redirectUrl: "https://console.mycompany.com/login/callbacks/oidc"
+#     scopes: ["openid", "profile", "email", "offline_access"]
+#     displayNameClaim: "name"
+
 #----------------------------------------------------------------------------
 # Console authorization and role bindings
 #----------------------------------------------------------------------------

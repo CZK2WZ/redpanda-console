@@ -88,6 +88,9 @@ func (api *API) setupConnectWithGRPCGateway(r chi.Router) {
 	api.Hooks.Route.InitConnectRPCRouter(r)
 
 	r.Use(observerInterceptor.WrapHandler)
+	if api.oidc != nil {
+		r.Use(api.oidc.RequireSession(consolev1alpha1connect.AuthenticationServiceListAuthenticationMethodsProcedure))
+	}
 
 	// Setup gRPC-Gateway
 	gwMux := runtime.NewServeMux(
@@ -170,7 +173,7 @@ func (api *API) setupConnectWithGRPCGateway(r chi.Router) {
 			consolev1alpha1connect.SecurityServiceName:       consolev1alpha1connect.UnimplementedSecurityServiceHandler{},
 			consolev1alpha1connect.LicenseServiceName:        licenseSvc,
 			consolev1alpha1connect.TransformServiceName:      consoleTransformSvcV1,
-			consolev1alpha1connect.AuthenticationServiceName: &AuthenticationDefaultHandler{},
+			consolev1alpha1connect.AuthenticationServiceName: api.authenticationHandler(),
 			consolev1alpha1connect.ClusterStatusServiceName:  clusterStatusSvc,
 			consolev1alpha1connect.SecretServiceName:         consolev1alpha1connect.UnimplementedSecretServiceHandler{},
 			dataplanev1alpha2connect.ACLServiceName:          aclSvcV1alpha2,
@@ -579,9 +582,18 @@ func (api *API) routes() *chi.Mux {
 			})
 		}
 
+		if api.oidc != nil {
+			router.Get("/auth/login/oidc", api.oidc.HandleLogin())
+			router.Get("/auth/callbacks/oidc", api.oidc.HandleCallback())
+			router.Get("/auth/logout", api.oidc.HandleLogout())
+		}
+
 		// API routes
 		router.Group(func(r chi.Router) {
 			r.Use(createSetVersionInfoHeader(version.BuiltAt))
+			if api.oidc != nil {
+				r.Use(api.oidc.RequireSession())
+			}
 			api.Hooks.Route.ConfigAPIRouter(r)
 
 			r.Route("/api", func(r chi.Router) {
